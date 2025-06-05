@@ -74,7 +74,7 @@ snapshot:
   version_template: "{{.Version}}"
 
 checksum:
-  name_template: "task_checksums.txt"
+  name_template: "modu_checksums.txt"
 
 sboms:
 - id: modu
