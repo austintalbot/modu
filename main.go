@@ -28,13 +28,18 @@ func main() {
 	p.EnterAltScreen()
 	defer p.ExitAltScreen()
 
-	err := p.Start()
+	tea, err := p.Run()
 	if err != nil {
 		log.Fatalln(err)
 	}
-
+	m, ok := tea.(*model)
+	if !ok {
+		log.Fatalln("expected model type")
+	}
 	if m.err != nil {
-		log.Fatalln(m.err)
+		if m.modules != nil {
+			log.Fatalln(m.err)
+		}
 	}
 }
 
@@ -55,6 +60,7 @@ type model struct {
 func newModel() *model {
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	s.Spinner = spinner.Dot
 
 	return &model{
 		color:   termenv.ColorProfile(),
@@ -135,15 +141,28 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) View() string {
 	var header, body, footer string
 	if !m.ready || m.modules == nil {
-		header = m.spinner.View() + " Loading..."
+		header = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("5")).
+			Bold(true).
+			Render(m.spinner.View() + " Loading modules...")
 	} else if len(m.modules) == 0 {
-		header = "All modules are up-to-date"
+		header = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("2")).
+			Bold(true).
+			Render("✅ All modules are up-to-date!")
 	} else {
-		header = fmt.Sprintf("Press enter to update [%d/%d]", m.cursor+1, len(m.modules))
+		header = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("6")).
+			Bold(true).
+			Render(fmt.Sprintf("Press %s to update [%d/%d]",
+				lipgloss.NewStyle().Underline(true).Render("enter"),
+				m.cursor+1, len(m.modules)))
 		m.viewport.SetContent(m.content())
 		body = m.viewport.View()
 	}
-	footer = "(press 'q' to quit)"
+	footer = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Render("(press 'q' to quit)")
 
 	return fmt.Sprintf("%s\n%s\n%s", header, body, footer)
 }
@@ -154,7 +173,7 @@ func (m *model) content() string {
 	for i, module := range m.modules {
 		cursor := " "
 		if m.cursor == i {
-			cursor = termenv.String(">").Foreground(m.color.Color("1")).String()
+			cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Render("❯")
 			if m.updating {
 				cursor = m.spinner.View()
 			}
@@ -162,7 +181,10 @@ func (m *model) content() string {
 
 		indirect := ""
 		if module.Indirect {
-			indirect = termenv.String(" // indirect").Foreground(m.color.Color("242")).String()
+			indirect = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("2")).
+				Faint(true).
+				Render(" // indirect")
 		}
 
 		m.builder.WriteString(
@@ -208,9 +230,9 @@ func (m *model) fixViewport(moveCursor bool) {
 	}
 
 	if m.cursor < top {
-		m.viewport.LineUp(top - m.cursor)
+		m.viewport.ScrollUp(top - m.cursor)
 	} else if m.cursor > bottom {
-		m.viewport.LineDown(m.cursor - bottom)
+		m.viewport.ScrollDown(m.cursor - bottom)
 	}
 }
 
@@ -239,12 +261,13 @@ func loadCmd() tea.Cmd {
 
 func updateCmd(m module) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("go", "get", "-u", m.Update.Path+"@"+m.Update.Version)
-		err := cmd.Run()
-		if err != nil {
-			return errMsg{err}
+		if !m.Indirect {
+			cmd := exec.Command("go", "get", "-u", m.Update.Path+"@"+m.Update.Version)
+			err := cmd.Run()
+			if err != nil {
+				return errMsg{err}
+			}
 		}
-
 		modules, err := load()
 		if err != nil {
 			return errMsg{err}
@@ -284,17 +307,13 @@ func load() ([]module, error) {
 			return nil, err
 		}
 
-		if !m.Main && m.Update != nil {
+		// not main module, but has an update available
+		if !m.Main && m.Update != nil && !m.Indirect {
 			modules = append(modules, m)
 		}
 	}
 
 	sort.Slice(modules, func(i, j int) bool {
-		if modules[i].Indirect && !modules[j].Indirect {
-			return false
-		} else if !modules[i].Indirect && modules[j].Indirect {
-			return true
-		}
 		return modules[i].Path < modules[j].Path
 	})
 
