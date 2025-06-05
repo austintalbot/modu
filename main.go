@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/muesli/reflow/ansi"
 	"github.com/muesli/reflow/truncate"
@@ -52,8 +53,8 @@ type model struct {
 }
 
 func newModel() *model {
-	s := spinner.NewModel()
-	s.ForegroundColor = "2"
+	s := spinner.New()
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 
 	return &model{
 		color:   termenv.ColorProfile(),
@@ -63,7 +64,7 @@ func newModel() *model {
 
 func (m *model) Init() tea.Cmd {
 	return tea.Batch(
-		spinner.Tick(m.spinner),
+		m.spinner.Tick,
 		loadCmd(),
 	)
 }
@@ -112,7 +113,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case spinner.TickMsg:
 		var cmd tea.Cmd
-		m.spinner, cmd = spinner.Update(msg, m.spinner)
+		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 	case tea.WindowSizeMsg:
 		if !m.ready {
@@ -134,13 +135,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) View() string {
 	var header, body, footer string
 	if !m.ready || m.modules == nil {
-		header = spinner.View(m.spinner) + " Loading..."
+		header = m.spinner.View() + " Loading..."
 	} else if len(m.modules) == 0 {
 		header = "All modules are up-to-date"
 	} else {
 		header = fmt.Sprintf("Press enter to update [%d/%d]", m.cursor+1, len(m.modules))
 		m.viewport.SetContent(m.content())
-		body = viewport.View(m.viewport)
+		body = m.viewport.View()
 	}
 	footer = "(press 'q' to quit)"
 
@@ -155,7 +156,7 @@ func (m *model) content() string {
 		if m.cursor == i {
 			cursor = termenv.String(">").Foreground(m.color.Color("1")).String()
 			if m.updating {
-				cursor = spinner.View(m.spinner)
+				cursor = m.spinner.View()
 			}
 		}
 
