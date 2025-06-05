@@ -16,7 +16,7 @@ upx:
   compress: best
 
 builds:
-- binary: task
+- binary: modu
   main: main.go
   goos:
   - windows
