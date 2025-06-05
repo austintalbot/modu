@@ -1,10 +1,12 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
 
+project_name: modu
+
 before:
   hooks:
   # You may remove this if you don't use go modules.
-  - go mod tidy
+  - go mod tidy -v
   # you may remove this if you don't need go generate
   - go generate ./...
 
@@ -17,7 +19,7 @@ upx:
 
 builds:
 - binary: modu
-  main: main.go
+  main: ./main.go
   goos:
   - windows
   - darwin
@@ -60,9 +62,29 @@ archives:
 
 release:
   draft: true
+  replace_existing_draft: true
+  replace_existing_artifacts: true
+  target_commitish: "{{ .Commit }}"
+  prerelease: auto
+  make_latest: true
+  mode: append
+  include_meta: true
 
 snapshot:
   version_template: "{{.Version}}"
 
 checksum:
   name_template: "task_checksums.txt"
+
+sboms:
+- id: modu
+  documents:
+  - "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.json"
+  cmd: syft
+  args: [ "$artifact", "--output", "cyclonedx-json=$document" ]
+  artifacts: binary
+  ids:
+  - modu
+
+# Whether to enable the size reporting or not.
+report_sizes: true
